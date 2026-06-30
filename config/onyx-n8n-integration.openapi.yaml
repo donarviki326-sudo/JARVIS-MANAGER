@@ -1,0 +1,372 @@
+openapi: 3.0.1
+info:
+  title: Business Automation Actions
+  description: >
+    Onyx agent actions that trigger n8n workflows. When a manager asks Onyx to
+    send a reminder, update CRM, post to Slack, or run any automation, this
+    OpenAPI spec maps those requests to n8n webhooks.
+    
+    Replace "https://n8n.yourdomain.com" with your actual n8n domain before
+    importing into Onyx.
+  version: "1.0.0"
+
+servers:
+  # CHANGE THIS: Replace with your actual n8n domain
+  - url: https://n8n.yourdomain.com/webhook
+
+paths:
+  /send-whatsapp-reminder:
+    post:
+      operationId: sendWhatsAppReminder
+      summary: Send WhatsApp reminder to a contact
+      description: >
+        Sends a WhatsApp message to a contact with a reminder about a
+        follow-up, task, or action item. Use when the manager wants to
+        send a reminder to a customer or team member via WhatsApp.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - phone_number
+                - message
+              properties:
+                phone_number:
+                  type: string
+                  description: >
+                    WhatsApp phone number with country code, e.g. "+919876543210".
+                    The number must be saved in WhatsApp Business contacts.
+                message:
+                  type: string
+                  description: >
+                    The reminder text to send. Keep under 160 chars for SMS,
+                    or up to 1024 for WhatsApp formatted message.
+                  maxLength: 1024
+                contact_name:
+                  type: string
+                  description: >
+                    Optional: Name of the contact (for logging and dashboard).
+                tags:
+                  type: array
+                  items:
+                    type: string
+                  description: >
+                    Optional: Tags like ["follow-up", "urgent"] for filtering
+                    automation history.
+      responses:
+        "200":
+          description: Reminder queued successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "queued"
+                  message_id:
+                    type: string
+                    description: Unique ID for tracking this message
+                  scheduled_time:
+                    type: string
+                    format: date-time
+                    description: ISO 8601 timestamp when message will be sent
+
+  /update-crm-contact:
+    post:
+      operationId: updateCRMContact
+      summary: Update contact information in CRM
+      description: >
+        Updates a contact record in your CRM system with new information.
+        Use when the manager wants to update a prospect's notes, phone,
+        status, or any custom field.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - contact_id
+                - updates
+              properties:
+                contact_id:
+                  type: string
+                  description: >
+                    Unique identifier of the contact in your CRM
+                    (e.g., Salesforce Account ID, HubSpot contact ID).
+                updates:
+                  type: object
+                  description: >
+                    Key-value pairs of fields to update. Examples:
+                    {"phone": "+919876543210", "status": "interested", "notes": "..."}
+                  properties:
+                    phone:
+                      type: string
+                    email:
+                      type: string
+                    status:
+                      type: string
+                    notes:
+                      type: string
+                    last_contact_date:
+                      type: string
+                      format: date-time
+                    custom_field:
+                      type: string
+      responses:
+        "200":
+          description: Contact updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "updated"
+                  contact_id:
+                    type: string
+                  updated_fields:
+                    type: array
+                    items:
+                      type: string
+
+  /post-slack-message:
+    post:
+      operationId: postSlackMessage
+      summary: Post a message to Slack channel
+      description: >
+        Posts a message to a Slack channel or user DM. Use to notify
+        the team about a completed task, alert, or update.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - channel
+                - message
+              properties:
+                channel:
+                  type: string
+                  description: >
+                    Slack channel name (e.g., "sales", "alerts") or user ID.
+                    Prefix channels with # or use @username for DMs.
+                message:
+                  type: string
+                  description: Plain text message or Slack markdown
+                  maxLength: 4000
+                include_thread:
+                  type: boolean
+                  description: >
+                    Optional: If true, message will be posted as a reply
+                    to the most recent message in the channel.
+                mention_users:
+                  type: array
+                  items:
+                    type: string
+                  description: >
+                    Optional: Slack user IDs to mention, e.g., ["U1234567"].
+      responses:
+        "200":
+          description: Message posted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "posted"
+                  message_ts:
+                    type: string
+                    description: Slack message timestamp (for threading)
+                  channel:
+                    type: string
+
+  /schedule-task:
+    post:
+      operationId: scheduleTask
+      summary: Schedule a follow-up task or reminder
+      description: >
+        Creates a task in your task management system (Asana, Trello, etc.)
+        or a simple reminder. Use when the manager needs to track a
+        follow-up action and be reminded at a specific time.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - task_title
+                - due_date
+              properties:
+                task_title:
+                  type: string
+                  description: "Title of the task"
+                  maxLength: 200
+                due_date:
+                  type: string
+                  format: date-time
+                  description: ISO 8601 date-time for when the task is due
+                assigned_to:
+                  type: string
+                  description: >
+                    Optional: Email or user ID of who should do this task.
+                    If empty, assigned to the current user.
+                priority:
+                  type: string
+                  enum: ["low", "medium", "high"]
+                  description: Task priority level
+                description:
+                  type: string
+                  description: Detailed description or notes about the task
+                tags:
+                  type: array
+                  items:
+                    type: string
+                  description: >
+                    Optional: Tags for organizing tasks (e.g., ["follow-up", "sales"]).
+      responses:
+        "200":
+          description: Task created and scheduled
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "scheduled"
+                  task_id:
+                    type: string
+                  reminder_scheduled_for:
+                    type: string
+                    format: date-time
+
+  /send-email:
+    post:
+      operationId: sendEmail
+      summary: Send an email via Gmail or SMTP
+      description: >
+        Sends an email to a recipient. Use when the manager wants to
+        auto-reply to an inquiry, send a follow-up, or notify a client.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - to
+                - subject
+                - body
+              properties:
+                to:
+                  type: string
+                  description: Recipient email address
+                  format: email
+                subject:
+                  type: string
+                  description: Email subject line
+                  maxLength: 200
+                body:
+                  type: string
+                  description: Email body (plain text or HTML)
+                  maxLength: 5000
+                cc:
+                  type: array
+                  items:
+                    type: string
+                  description: Optional CC recipients
+                bcc:
+                  type: array
+                  items:
+                    type: string
+                  description: Optional BCC recipients
+                template:
+                  type: string
+                  description: >
+                    Optional: Use a pre-built email template name
+                    (e.g., "welcome", "follow-up").
+      responses:
+        "200":
+          description: Email sent successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "sent"
+                  message_id:
+                    type: string
+                    description: Email provider's message ID
+
+  /run-custom-workflow:
+    post:
+      operationId: runCustomWorkflow
+      summary: Run any custom n8n workflow
+      description: >
+        Trigger a custom n8n workflow by name. For advanced users who
+        have built specialized automations not covered by the standard
+        actions above. Use the workflow's exact name as it appears in n8n.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - workflow_name
+              properties:
+                workflow_name:
+                  type: string
+                  description: >
+                    Name of the n8n workflow to run, e.g. "Export to Salesforce"
+                params:
+                  type: object
+                  description: >
+                    Any parameters the workflow expects (varies by workflow).
+      responses:
+        "200":
+          description: Workflow triggered
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "triggered"
+                  execution_id:
+                    type: string
+
+# =========================================================================
+# Server Customization Instructions
+# =========================================================================
+# 
+# 1. Replace "https://n8n.yourdomain.com" in the "servers" section above
+#    with your actual n8n domain (e.g., https://automation.mycompany.com).
+#
+# 2. In n8n, create a **Webhook** node for each endpoint above:
+#    - Set it to POST
+#    - Set path to (e.g., "/send-whatsapp-reminder")
+#    - Add a **Respond to Webhook** node
+#    - **Activate** the workflow (don't just save draft)
+#    - Copy the full URL that n8n displays
+#
+# 3. If you add a new automation workflow:
+#    - Create a corresponding POST operation above
+#    - Use a descriptive operationId (no spaces, alphanumeric + underscores)
+#    - Include a summary and description
+#    - Define the request schema clearly so the LLM understands what to pass
+#    - Import the updated spec into Onyx admin panel
+#
+# =========================================================================
