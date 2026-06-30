@@ -1,0 +1,329 @@
+version: "3.9"
+
+# Jarvis AI Manager SaaS Stack
+# Services: Onyx (chat AI), n8n (automations), Inbox Zero (email), Caddy (HTTPS)
+# All on one shared network. Total footprint: ~4GB RAM at idle.
+
+services:
+
+  # =========================================================================
+  # Reverse Proxy + Automatic HTTPS (Caddy)
+  # =========================================================================
+  caddy:
+    image: caddy:2.8-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deployment/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    environment:
+      - ONYX_DOMAIN=${ONYX_DOMAIN}
+      - N8N_DOMAIN=${N8N_DOMAIN}
+      - INBOX_DOMAIN=${INBOX_DOMAIN}
+    networks:
+      - jarvis_net
+    depends_on:
+      - onyx_web
+      - n8n_web
+      - inbox_web
+    healthcheck:
+      test: ["CMD", "caddy", "version"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # =========================================================================
+  # Onyx (Chat + RBAC + Code Interpreter + Charts)
+  # =========================================================================
+  onyx_postgres:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: onyx
+      POSTGRES_USER: onyx
+      POSTGRES_PASSWORD: ${ONYX_DB_PASSWORD:-onyx_dev_password}
+    volumes:
+      - onyx_postgres_data:/var/lib/postgresql/data
+    networks:
+      - jarvis_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U onyx -d onyx"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  onyx_redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - onyx_redis_data:/data
+    networks:
+      - jarvis_net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  onyx_minio:
+    image: minio/minio:RELEASE.2024-12-13T22-52-09Z
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: ${ONYX_MINIO_PASSWORD:-minioadmin_dev}
+    volumes:
+      - onyx_minio_data:/data
+    command: server /data --console-address ":9001"
+    networks:
+      - jarvis_net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  onyx_indexing_model_server:
+    image: onyx/indexing-model-server:0.3-v0
+    restart: unless-stopped
+    environment:
+      - HF_HOME=/root/.cache/huggingface
+      - TRANSFORMERS_CACHE=/root/.cache/huggingface/transformers
+    volumes:
+      - onyx_model_cache:/root/.cache/huggingface
+    networks:
+      - jarvis_net
+    # Lite mode: indexing-only, no inference server (no RAG vector search)
+
+  onyx_web:
+    image: onyx/onyx-backend:0.3-v0
+    restart: unless-stopped
+    depends_on:
+      onyx_postgres:
+        condition: service_healthy
+      onyx_redis:
+        condition: service_healthy
+      onyx_minio:
+        condition: service_healthy
+      onyx_indexing_model_server:
+        condition: service_started
+    environment:
+      # Core
+      - ONYX_DOMAIN=${ONYX_DOMAIN}
+      - AUTH_TYPE=google_oauth  # Options: basic, google_oauth, oidc
+      - GOOGLE_OAUTH_CLIENT_ID=${GOOGLE_OAUTH_CLIENT_ID:-}
+      - GOOGLE_OAUTH_CLIENT_SECRET=${GOOGLE_OAUTH_CLIENT_SECRET:-}
+      - SECRET_KEY=${ONYX_SECRET}
+      
+      # Database
+      - POSTGRES_HOST=onyx_postgres
+      - POSTGRES_PORT=5432
+      - POSTGRES_USER=onyx
+      - POSTGRES_PASSWORD=${ONYX_DB_PASSWORD:-onyx_dev_password}
+      - POSTGRES_DB=onyx
+      
+      # Redis
+      - REDIS_HOST=onyx_redis
+      - REDIS_PORT=6379
+      
+      # File storage (MinIO)
+      - MINIO_ROOT_USER=minioadmin
+      - MINIO_ROOT_PASSWORD=${ONYX_MINIO_PASSWORD:-minioadmin_dev}
+      - MINIO_SECURE=false
+      - MINIO_HOST=onyx_minio
+      
+      # Models
+      - EMBEDDING_MODEL_SERVER_HOST=onyx_indexing_model_server:8080
+      
+      # Features
+      - DISABLE_LLM_FILTER_EXTRACTION=false
+      - ENABLE_ONYX_BOT=true
+      - ENABLE_SLACK_BOT=true
+      
+      # Email
+      - SMTP_SERVER=${SMTP_SERVER}
+      - SMTP_PORT=${SMTP_PORT}
+      - SMTP_USERNAME=${SMTP_USERNAME}
+      - SMTP_PASSWORD=${SMTP_PASSWORD}
+      - SMTP_FROM_EMAIL=${SMTP_FROM_EMAIL}
+      - ENABLE_EMAIL_CONNECTORS=true
+      
+      # Timezone
+      - TIMEZONE=${TIMEZONE}
+      
+      # Logging
+      - LOG_LEVEL=INFO
+    volumes:
+      - onyx_data:/home/onyx/onyx
+    ports:
+      - "8000:8000"
+    networks:
+      - jarvis_net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # =========================================================================
+  # n8n (Automation Engine)
+  # =========================================================================
+  n8n_postgres:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: n8n
+      POSTGRES_USER: n8n
+      POSTGRES_PASSWORD: ${N8N_DB_PASSWORD:-n8n_dev_password}
+    volumes:
+      - n8n_postgres_data:/var/lib/postgresql/data
+    networks:
+      - jarvis_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U n8n -d n8n"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  n8n_redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    volumes:
+      - n8n_redis_data:/data
+    networks:
+      - jarvis_net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  n8n_web:
+    image: n8n/n8n:1.60.0-latest
+    restart: unless-stopped
+    depends_on:
+      n8n_postgres:
+        condition: service_healthy
+      n8n_redis:
+        condition: service_healthy
+    environment:
+      - N8N_HOST=0.0.0.0
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=https
+      - WEBHOOK_URL=https://${N8N_DOMAIN}/
+      - GENERIC_TIMEZONE=${TIMEZONE}
+      - TZ=${TIMEZONE}
+      
+      # Database
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_HOST=n8n_postgres
+      - DB_POSTGRESDB_PORT=5432
+      - DB_POSTGRESDB_DATABASE=n8n
+      - DB_POSTGRESDB_USER=n8n
+      - DB_POSTGRESDB_PASSWORD=${N8N_DB_PASSWORD:-n8n_dev_password}
+      
+      # Cache
+      - REDIS_CONNECTIONSTRING=redis://n8n_redis:6379
+      
+      # Security
+      - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY}
+      - N8N_USER_MANAGEMENT_DISABLED=false
+      
+      # Admin
+      - N8N_DEFAULT_USER_EMAIL=${ADMIN_EMAIL:-admin@example.com}
+      - N8N_DEFAULT_USER_PASSWORD=${N8N_DEFAULT_PASSWORD:-change_me_in_ui}
+      
+      # Features
+      - EXECUTIONS_TIMEOUT=3600
+      - EXECUTIONS_TIMEOUT_MAX=36000
+    volumes:
+      - n8n_data:/home/node/.n8n
+    networks:
+      - jarvis_net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5678/api/v1/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # =========================================================================
+  # Inbox Zero (Email Automation + AI Drafting)
+  # =========================================================================
+  inbox_postgres:
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: inbox_zero
+      POSTGRES_USER: inbox_zero
+      POSTGRES_PASSWORD: ${INBOX_DB_PASSWORD:-inbox_dev_password}
+    volumes:
+      - inbox_postgres_data:/var/lib/postgresql/data
+    networks:
+      - jarvis_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U inbox_zero -d inbox_zero"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  inbox_web:
+    image: ghcr.io/elie222/inbox-zero:latest
+    restart: unless-stopped
+    depends_on:
+      inbox_postgres:
+        condition: service_healthy
+    environment:
+      # Database
+      - DATABASE_URL=postgresql://inbox_zero:${INBOX_DB_PASSWORD:-inbox_dev_password}@inbox_postgres:5432/inbox_zero
+      
+      # Session
+      - NEXTAUTH_SECRET=${INBOX_SECRET}
+      - NEXTAUTH_URL=https://${INBOX_DOMAIN}
+      
+      # Email/OAuth (Gmail)
+      - GOOGLE_CLIENT_ID=${GOOGLE_OAUTH_CLIENT_ID:-}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_OAUTH_CLIENT_SECRET:-}
+      
+      # AI (optional)
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      
+      # Timezone
+      - TZ=${TIMEZONE}
+    volumes:
+      - inbox_data:/app/data
+    ports:
+      - "3000:3000"
+    networks:
+      - jarvis_net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+networks:
+  jarvis_net:
+    driver: bridge
+
+volumes:
+  # Onyx
+  onyx_postgres_data:
+  onyx_redis_data:
+  onyx_minio_data:
+  onyx_model_cache:
+  onyx_data:
+  
+  # n8n
+  n8n_postgres_data:
+  n8n_redis_data:
+  n8n_data:
+  
+  # Inbox Zero
+  inbox_postgres_data:
+  inbox_data:
+  
+  # Caddy
+  caddy_data:
+  caddy_config:

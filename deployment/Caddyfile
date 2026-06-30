@@ -1,0 +1,65 @@
+# Caddyfile: Automatic HTTPS reverse proxy for Jarvis SaaS
+# 
+# Caddy automatically:
+# - Issues free HTTPS certs from Let's Encrypt
+# - Renews them before expiration
+# - Routes traffic to the right backend service
+#
+# Just point your DNS A records at this server's IP and Caddy handles the rest.
+
+# Global settings
+{
+	# Optional: Set log level for debugging
+	# log {
+	# 	level debug
+	# }
+
+	# Let's Encrypt email (for renewal notifications)
+	email admin@{$ONYX_DOMAIN}
+}
+
+# =========================================================================
+# Onyx (Chat AI)
+# =========================================================================
+{$ONYX_DOMAIN} {
+	reverse_proxy onyx_web:8000 {
+		header_uri -X-Forwarded-Proto https
+		header_uri -X-Forwarded-Host {host}
+		header_uri -X-Forwarded-Port 443
+	}
+
+	# Optional: Rate limiting to prevent abuse
+	# rate_limit {
+	# 	zone default {
+	# 		key {remote_host}
+	# 		rate 100r/m
+	# 	}
+	# }
+
+	# Optional: Basic auth (uncomment and set if you want to restrict access before launch)
+	# basicauth /* {
+	# 	admin JDJhJDA0JE5aQktGTDZOTXRkWTBSUGVMdDdyLnc1cFJuaWFLdFlrZFo1TDkuRUw4dGc2TDh0bHpm
+	# }
+}
+
+# =========================================================================
+# n8n (Automation Engine)
+# =========================================================================
+{$N8N_DOMAIN} {
+	reverse_proxy n8n_web:5678 {
+		header_uri -X-Forwarded-Proto https
+		header_uri -X-Forwarded-Host {host}
+		header_uri -X-Forwarded-Port 443
+	}
+}
+
+# =========================================================================
+# Inbox Zero (Email Automation)
+# =========================================================================
+{$INBOX_DOMAIN} {
+	reverse_proxy inbox_web:3000 {
+		header_uri -X-Forwarded-Proto https
+		header_uri -X-Forwarded-Host {host}
+		header_uri -X-Forwarded-Port 443
+	}
+}
