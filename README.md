@@ -34,201 +34,293 @@ No custom workflows. No coding. Just natural language + a conversational AI.
 
 ---
 
-## Quick Start
+## 🚀 Quick Start (5 Minutes)
 
-### Prerequisites
-- A VPS with 4GB RAM (e.g., Hetzner CX22 ~$6/mo, DigitalOcean Basic ~$24/mo)
-- A domain name
-- 30 minutes
+### Option 1: Docker Swarm (Recommended) — $6/mo
 
-### 1. Clone and Setup
+Deploy to a **Hetzner CX22** VPS (2 vCPU, 4GB RAM, €5.90/mo):
 
 ```bash
-git clone https://github.com/YOUR_ORG/jarvis-saas-complete.git
-cd jarvis-saas-complete
+# 1. Create Hetzner account & CX22 server
+# 2. SSH into server
+ssh root@YOUR_VPS_IP
 
-# Generate secrets and create .env
-bash scripts/setup.sh
-# Choose option 2 (generate secrets)
-# Then choose option 3 (validate .env after filling it in)
+# 3. Clone & deploy
+git clone https://github.com/donarviki326-sudo/JARVIS-MANAGER.git
+cd JARVIS-MANAGER
+bash scripts/deploy-swarm.sh
+
+# 4. Edit .env with your domains & passwords
+nano /root/.env
+bash scripts/deploy-swarm.sh
+
+# 5. Point DNS to your VPS IP
+# onyx.yourdomain.com → YOUR_VPS_IP
+# n8n.yourdomain.com → YOUR_VPS_IP
+# inbox.yourdomain.com → YOUR_VPS_IP
+
+# 6. Access (after DNS propagates, 5-15 min)
+# https://onyx.yourdomain.com
+# https://n8n.yourdomain.com
+# https://inbox.yourdomain.com
 ```
 
-### 2. Deploy
+**See [HETZNER_QUICKSTART.md](./HETZNER_QUICKSTART.md) for detailed guide.**
+
+### Option 2: Traditional VPS Setup
+
+For manual setup on any Linux VPS:
 
 ```bash
-# Point your DNS A records at your VPS first:
-#   onyx.yourdomain.com    A  <YOUR_VPS_IP>
-#   n8n.yourdomain.com     A  <YOUR_VPS_IP>
-#   inbox.yourdomain.com   A  <YOUR_VPS_IP>
-
-# Then:
+git clone https://github.com/donarviki326-sudo/JARVIS-MANAGER.git
+cd JARVIS-MANAGER
 bash scripts/setup.sh
-# Choose option 8 (full setup: check prereqs, pull images, start services)
 ```
 
-### 3. Access
+**See [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md) for detailed guide.**
 
-After 1-2 minutes:
-- **Onyx chat:** https://onyx.yourdomain.com
-- **n8n automation:** https://n8n.yourdomain.com
-- **Inbox Zero email:** https://inbox.yourdomain.com
+---
 
-Create an admin account on first visit.
+## 📚 Documentation
 
-### 4. Wire Them Together
+| Document | Purpose |
+|----------|---------|
+| **[HETZNER_QUICKSTART.md](./HETZNER_QUICKSTART.md)** | 5-minute Docker Swarm setup on Hetzner |
+| **[DOCKER_SWARM_SETUP.md](./DOCKER_SWARM_SETUP.md)** | Detailed Docker Swarm guide with monitoring & backups |
+| **[DEPLOYMENT_SUMMARY.md](./DEPLOYMENT_SUMMARY.md)** | Overview, architecture, and cost breakdown |
+| **[DEPLOYMENT_CHECKLIST.md](./DEPLOYMENT_CHECKLIST.md)** | Step-by-step deployment tracking |
+| **[DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md)** | Traditional VPS setup guide |
+| **[GITPOD_QUICK_START.md](./GITPOD_QUICK_START.md)** | Development setup in Gitpod |
 
-In Onyx:
-1. Go to **Admin → Custom Tools**
+---
+
+## 💰 Cost Comparison
+
+| Platform | Services | Cost | Setup |
+|----------|----------|------|-------|
+| **Docker Swarm (Hetzner)** | Unlimited | €5.90/mo | 5 min |
+| **Railway** | 5 max | $20+/mo | Easy |
+| **Kubernetes** | Unlimited | $12+/mo | Complex |
+| **AWS** | Unlimited | $50+/mo | Very complex |
+
+**Recommendation:** Start with Docker Swarm on Hetzner. Scale to Kubernetes later if needed.
+
+---
+
+## 🏗️ Architecture
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    Hetzner CX22 VPS                     │
+│                  (2 vCPU, 4GB RAM, €5.90)               │
+├─────────────────────────────────────────────────────────┤
+│                    Docker Swarm                         │
+├─────────────────────────────────────────────────────────┤
+│                                                         │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐ │
+│  │    Caddy     │  │    Onyx      │  │     n8n      │ │
+│  │  (Reverse    │  │   (Chat AI)  │  │ (Automation) │ │
+│  │   Proxy)     │  │              │  │              │ │
+│  └──────────────┘  └──────────────┘  └──────────────┘ │
+│                                                         │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐ │
+│  │ Inbox Zero   │  │  PostgreSQL  │  │    Redis     │ │
+│  │   (Email)    │  │  (Database)  │  │   (Cache)    │ │
+│  └──────────────┘  └──────────────┘  └──────────────┘ │
+│                                                         │
+│  ┌──────────────────────────────────────────────────┐ │
+│  │              MinIO (Object Storage)              │ │
+│  └──────────────────────────────────────────────────┘ │
+│                                                         │
+└─────────────────────────────────────────────────────────┘
+         ↓
+    Internet (HTTPS)
+         ↓
+┌─────────────────────────────────────────────────────────┐
+│              Your Domain (yourdomain.com)               │
+│  onyx.yourdomain.com → Onyx                            │
+│  n8n.yourdomain.com → n8n                              │
+│  inbox.yourdomain.com → Inbox Zero                     │
+└─────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 🔧 Wire Services Together
+
+Once deployed, connect Onyx to n8n:
+
+1. Go to **Onyx Admin → Custom Tools**
 2. Paste the content of `config/onyx-n8n-integration.openapi.yaml`
 3. Click **Validate** → **Save**
 
-Now Onyx can trigger n8n automations. In chat, you can ask things like:
+Now Onyx can trigger n8n automations. In chat:
+
 > *"Send a WhatsApp reminder to +919876543210 about the meeting tomorrow"*
 
-And it works.
+It works.
 
 ---
 
-## Full Documentation
+## 📋 Features
 
-1. **[DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md)** — Step-by-step setup with troubleshooting (start here)
-2. **[BRANDING.md](./docs/BRANDING.md)** — How to customize logos, colors, and names for your clients
-3. **[docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md)** — How the pieces fit together (data flow, security)
-4. **[docs/MULTI_TENANT_ROADMAP.md](./docs/MULTI_TENANT_ROADMAP.md)** — Scaling to many clients
+### Onyx (Chat AI)
+- ✅ Natural language interface
+- ✅ Code execution (Python, SQL, etc.)
+- ✅ Chart generation
+- ✅ Role-based access control (RBAC)
+- ✅ SSO support (Google OAuth, OIDC)
+- ✅ Custom tool integration
 
----
+### n8n (Automation)
+- ✅ 400+ integrations (Slack, WhatsApp, Gmail, Salesforce, etc.)
+- ✅ Visual workflow builder
+- ✅ Webhooks & triggers
+- ✅ Scheduled tasks
+- ✅ Error handling & retries
 
-## What You Can Do Today (v1)
+### Inbox Zero (Email)
+- ✅ Gmail integration
+- ✅ Email automation rules
+- ✅ AI-powered drafting
+- ✅ Bulk actions
+- ✅ Analytics
 
-✅ **Chat with AI about business data** (natural language queries + charting)
-✅ **Automate repetitive tasks** (WhatsApp reminders, CRM updates, Slack posts, email drafts)
-✅ **Manage email efficiently** (AI-organized inbox, tone-matched drafts)
-✅ **Team collaboration** (share chats, RBAC, audit logs)
-✅ **Custom integrations** (add any service n8n supports: Salesforce, HubSpot, Stripe, etc.)
-
----
-
-## What You Can Build Next (v2+)
-
-- **Multi-tenant SaaS** (one stack per client → shared infrastructure + billing)
-- **Mobile app** (React Native wrapper around the web UI)
-- **Deeper BI** (add WrenAI for governed SQL + dashboards across multiple DBs)
-- **Custom LLM** (swap Claude for an open-source model like Llama)
-- **Marketplace** (pre-built agent templates for common verticals: real estate, B2B SaaS, healthcare)
-
----
-
-## Licensing & Resale
-
-**TL;DR:** You can build a SaaS product, but be mindful of n8n's licensing.
-
-### Open-Source Components
-- **Onyx:** MIT licensed → no restrictions on resale
-- **Inbox Zero:** Open source (check LICENSE) → safe to resale
-- **Caddy:** Apache 2.0 → no restrictions
-
-### n8n Licensing ⚠️
-- **n8n runs under the "Sustainable Use License"** — it restricts commercial use in specific scenarios
-- **You CAN:** Host n8n as a backend service for your SaaS (customers don't directly access it)
-- **You CANNOT:** White-label n8n itself or charge specifically for "access to n8n"
-- **Best practice:** Position n8n as "automation engine inside Jarvis," not a separate product
-
-If this is unclear or you plan large-scale resale, reach out to n8n for an enterprise/embed license (they offer this).
+### Caddy (Reverse Proxy)
+- ✅ Automatic HTTPS (Let's Encrypt)
+- ✅ Zero-config SSL
+- ✅ Load balancing
+- ✅ Reverse proxy
 
 ---
 
-## Comparison: "Jarvis" vs. Building From Scratch
+## 🔐 Security
 
-| Aspect | Jarvis (This Stack) | Build From Scratch |
-|--------|-------------------|-------------------|
-| **Time to MVP** | 2 hours | 3-6 months |
-| **Maintenance** | Patch 3 projects | Build + maintain everything |
-| **Features** | 50+ integrations included | Start with zero integrations |
-| **Cost to deploy** | $5-7/mo VPS | $5-7/mo + dev time |
-| **Can resell to clients** | Yes (with licensing care) | Yes (if you own code) |
+- ✅ Automatic SSL certificates (Let's Encrypt)
+- ✅ Environment-based secrets (no hardcoding)
+- ✅ Database passwords encrypted
+- ✅ OAuth support for SSO
+- ✅ Firewall rules (allow only 22, 80, 443)
+- ✅ Health checks on all services
 
----
-
-## Architecture at a Glance
-
-```
-┌─────────────────────────────────────────────────┐
-│          Manager (Chat Interface)               │
-│             (Onyx Web UI)                       │
-└──────────────────┬──────────────────────────────┘
-                   │ Natural language
-                   ▼
-        ┌──────────────────────┐
-        │    Onyx Backend      │  ← Orchestrator
-        │  - Parse intent      │
-        │  - Execute SQL/Python│
-        │  - Generate charts   │
-        └──────────┬───────────┘
-                   │
-        ┌──────────┴──────────┐
-        │                     │
-        ▼                     ▼
-    ┌────────────┐      ┌──────────────┐
-    │  n8n       │      │ Inbox Zero   │
-    │ Webhooks   │      │ Email + AI   │
-    │ Automations│      │ Drafting     │
-    └────┬───────┘      └──────────────┘
-         │
-    ┌────┴────────────────────────┐
-    │                             │
-    ▼                             ▼
-[WhatsApp] [Slack]           [CRM/HubSpot]
-[Email]    [Calendar]        [Salesforce]
-```
+**See [DOCKER_SWARM_SETUP.md](./DOCKER_SWARM_SETUP.md#security-best-practices) for security best practices.**
 
 ---
 
-## Support & Community
+## 📊 Monitoring & Maintenance
 
-- **Onyx:** https://github.com/onyx-dot-app/onyx (Discussions, Issues)
-- **n8n:** https://docs.n8n.io + Community Forum
-- **Inbox Zero:** https://github.com/elie222/inbox-zero (Issues, PRs welcome)
-
-Each project is actively maintained. We recommend checking for updates monthly.
-
----
-
-## Next Steps
-
-1. **[Read DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md)** to deploy Stage 0-3
-2. **Customize branding** using [docs/BRANDING.md](./docs/BRANDING.md)
-3. **Connect your first client's data** (database, CRM, email)
-4. **Build 2-3 sample automations** (WhatsApp reminder, CRM update, Slack alert)
-5. **Test the full flow:** Chat → trigger automation → see result
-
-Then you have a working AI manager assistant ready to show clients.
-
----
-
-## License & Legal
-
-This project bundles open-source software. Each component retains its original license (see above). By using this stack, you agree to comply with the licenses of:
-- Onyx (MIT)
-- n8n (Sustainable Use License — review carefully if reselling)
-- Inbox Zero (OSS, verify current license)
-- Caddy (Apache 2.0)
-
-**This is not legal advice.** For commercial use or resale, consult a lawyer familiar with open-source licensing.
-
----
-
-## Questions?
-
-- See [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md) **Troubleshooting** section first
-- Check Docker logs: `docker compose logs -f`
-- Open an issue on the respective project's GitHub
-- Reach out to the Onyx, n8n, or Inbox Zero communities
-
-Good luck! 🚀
-
----
-
-**Ready to build?** Start with:
+### View Logs
 ```bash
-bash scripts/setup.sh
+docker service logs jarvis_onyx_web
+docker service logs -f jarvis_n8n_web
 ```
+
+### Monitor Resources
+```bash
+docker stats
+```
+
+### Scale Services
+```bash
+docker service scale jarvis_onyx_web=2
+```
+
+### Update Services
+```bash
+docker service update --image onyx/onyx-backend:0.3-v0 jarvis_onyx_web
+```
+
+### Backup Data
+```bash
+docker run --rm -v jarvis_onyx_data:/data -v /backup:/backup \
+  alpine tar czf /backup/onyx_data.tar.gz -C /data .
+```
+
+**See [DOCKER_SWARM_SETUP.md](./DOCKER_SWARM_SETUP.md#monitoring--maintenance) for detailed monitoring guide.**
+
+---
+
+## 🐛 Troubleshooting
+
+### Services won't start
+```bash
+docker stack ps jarvis --no-trunc
+docker service logs jarvis_SERVICE_NAME
+```
+
+### DNS not resolving
+```bash
+nslookup onyx.yourdomain.com
+```
+
+### Out of memory
+Upgrade to CX32 (8GB RAM, €11.90/mo) in Hetzner console.
+
+### Need to redeploy
+```bash
+docker stack rm jarvis
+bash scripts/deploy-swarm.sh
+```
+
+**See [DOCKER_SWARM_SETUP.md](./DOCKER_SWARM_SETUP.md#troubleshooting) for detailed troubleshooting.**
+
+---
+
+## 📦 What's Included
+
+- ✅ Complete docker-compose.yml with all services
+- ✅ Automated deployment script
+- ✅ Environment configuration template
+- ✅ Caddy reverse proxy config
+- ✅ Health checks on all services
+- ✅ Persistent volumes for data
+- ✅ Comprehensive documentation
+- ✅ Deployment checklist
+
+---
+
+## 🚀 Next Steps
+
+1. **Read [HETZNER_QUICKSTART.md](./HETZNER_QUICKSTART.md)** (5 min)
+2. **Create Hetzner account** (2 min)
+3. **Provision CX22 server** (2 min)
+4. **Run deployment script** (5 min)
+5. **Configure DNS** (1 min)
+6. **Access services** ✅
+
+---
+
+## 📄 License
+
+This project is open-source and available under the MIT License. See individual service licenses:
+- **Onyx**: MIT
+- **n8n**: Sustainable Use License (free for self-hosted)
+- **Inbox Zero**: MIT
+- **Caddy**: Apache 2.0
+
+---
+
+## 🤝 Support
+
+- **Onyx Docs**: https://docs.onyx.app
+- **n8n Docs**: https://docs.n8n.io
+- **Inbox Zero**: https://github.com/elie222/inbox-zero
+- **Caddy Docs**: https://caddyserver.com/docs
+- **Docker Swarm Docs**: https://docs.docker.com/engine/swarm/
+
+---
+
+## 🎯 Roadmap
+
+- [ ] Multi-tenant support
+- [ ] Kubernetes deployment guide
+- [ ] Automated backups to S3
+- [ ] Monitoring dashboard (Grafana)
+- [ ] Uptime monitoring (Uptime Kuma)
+- [ ] Custom branding guide
+- [ ] API documentation
+
+---
+
+**Ready to deploy?** Start with [HETZNER_QUICKSTART.md](./HETZNER_QUICKSTART.md) 🚀
+
